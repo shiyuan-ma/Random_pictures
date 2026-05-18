@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>标签图片查看器</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d12;
+      --panel: rgba(18, 21, 29, 0.88);
+      --text: #f6f7fb;
+      --muted: #9ba3b4;
+      --line: rgba(255, 255, 255, 0.1);
+      --accent: #ff5d7a;
+      --accent-2: #7c5cff;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(255, 93, 122, 0.22), transparent 32vw),
+        radial-gradient(circle at top right, rgba(124, 92, 255, 0.18), transparent 32vw),
+        var(--bg);
+      color: var(--text);
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+    }
+
+    button, input { font: inherit; }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .bar {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      justify-content: space-between;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(11, 13, 18, 0.9);
+      backdrop-filter: blur(16px);
+    }
+
+    .title {
+      display: grid;
+      gap: 4px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(20px, 3vw, 30px);
+    }
+
+    .hint,
+    .status {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .quick-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 0 18px 12px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(11, 13, 18, 0.82);
+    }
+
+    .quick-tags::before {
+      content: attr(data-title);
+      flex-basis: 100%;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 2px;
+    }
+
+    .tag-empty {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 5px 2px;
+    }
+
+    .tag-chip {
+      min-height: 32px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .tag-chip.active {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-color: transparent;
+    }
+
+    .field {
+      min-width: min(56vw, 420px);
+      min-height: 46px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--text);
+      outline: 0;
+      font-size: 15px;
+    }
+
+    button {
+      min-height: 46px;
+      padding: 0 20px;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff;
+      cursor: pointer;
+      transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
+      font-size: 15px;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.08);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+      transform: none;
+    }
+
+    .main {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .statusline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      flex-wrap: wrap;
+    }
+
+    .gallery {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      position: relative;
+      min-height: clamp(220px, 30vh, 320px);
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(24, 28, 38, 0.92);
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.25);
+      cursor: zoom-in;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+    }
+
+    .card img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+      opacity: 0;
+      transform: scale(1.03);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      user-select: none;
+      -webkit-user-drag: none;
+      background: #0f121a;
+      border-radius: 12px;
+    }
+
+    .card.loaded img {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(110deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+      transform: translateX(-100%);
+      animation: shimmer 1.2s infinite;
+      pointer-events: none;
+    }
+
+    .card.loaded::before { display: none; }
+
+    .label {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.55);
+      color: rgba(255, 255, 255, 0.88);
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: none;
+      background: rgba(0, 0, 0, 0.92);
+      touch-action: none;
+      user-select: none;
+    }
+
+    .overlay.open { display: block; }
+
+    .stage {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      cursor: grab;
+    }
+
+    .stage.dragging { cursor: grabbing; }
+
+    .preview {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      max-width: 95vw;
+      max-height: 90vh;
+      border-radius: 10px;
+      box-shadow: 0 24px 90px rgba(0, 0, 0, 0.7);
+      transform-origin: center center;
+      user-select: none;
+      -webkit-user-drag: none;
+      touch-action: none;
+    }
+
+    .tools {
+      position: fixed;
+      left: 50%;
+      bottom: 22px;
+      transform: translateX(-50%);
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+    }
+
+    .tools button,
+    .close-btn {
+      min-width: 52px;
+      min-height: 48px;
+      padding: 0 16px;
+      background: rgba(255, 255, 255, 0.1);
+      font-size: 16px;
+    }
+
+    .zoom-text {
+      min-width: 70px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .close-btn {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      z-index: 60;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    @keyframes shimmer {
+      to { transform: translateX(100%); }
+    }
+
+    @media (max-width: 720px) {
+      .bar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .controls {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .field {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .gallery {
+        grid-template-columns: 1fr;
+      }
+
+      .card {
+        min-height: 220px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="bar">
+      <div class="title">
+        <h1>标签图片查看器</h1>
+        <p class="hint">输入标签后加载 4 张图片，点击后可放大、缩小、拖动查看。</p>
+      </div>
+      <div class="controls">
+        <input id="tagInput" class="field" type="text" placeholder="例如：Metart / Cosplay / Japan" />
+        <button id="loadButton" type="button">加载 4 张</button>
+        <button id="saveTagButton" type="button">收藏标签</button>
+        <button id="removeTagButton" type="button">取消收藏</button>
+      </div>
+    </header>
+    <div id="quickTags" class="quick-tags" data-title="默认标签" aria-label="默认标签"></div>
+    <div id="favoriteTags" class="quick-tags" data-title="收藏标签" aria-label="收藏标签"></div>
+
+    <main class="main">
+      <div class="statusline">
+        <span id="status">准备加载图片...</span>
+        <span id="counter">本地计数读取中...</span>
+      </div>
+      <section id="gallery" class="gallery" aria-label="图片列表"></section>
+    </main>
+  </div>
+
+  <div id="overlay" class="overlay" aria-hidden="true">
+    <button id="closeButton" class="close-btn" type="button">关闭</button>
+    <div id="stage" class="stage">
+      <img id="preview" class="preview" alt="大图预览" />
+    </div>
+    <div class="tools">
+      <button id="zoomOut" type="button" title="缩小">−</button>
+      <span id="zoomText" class="zoom-text">100%</span>
+      <button id="zoomIn" type="button" title="放大">+</button>
+      <button id="resetZoom" type="button">重置</button>
+    </div>
+  </div>
+
+  <script>
+    const apiBase = 'http://127.0.0.1:8000/api';
+    const tagInput = document.getElementById('tagInput');
+    const loadButton = document.getElementById('loadButton');
+    const quickTagsEl = document.getElementById('quickTags');
+    const favoriteTagsEl = document.getElementById('favoriteTags');
+    const gallery = document.getElementById('gallery');
+    const statusEl = document.getElementById('status');
+    const counterEl = document.getElementById('counter');
+    const overlay = document.getElementById('overlay');
+    const stage = document.getElementById('stage');
+    const preview = document.getElementById('preview');
+    const zoomText = document.getElementById('zoomText');
+    const closeButton = document.getElementById('closeButton');
+    const saveTagButton = document.getElementById('saveTagButton');
+    const removeTagButton = document.getElementById('removeTagButton');
+
+    const requestLimit = {
+      key: 'tag-viewer-request-times-v1',
+      windowMs: 300 * 1000,
+      max: 60,
+    };
+
+    const favoriteTagStore = {
+      key: 'tag-viewer-favorite-tags-v1',
+      max: 30,
+    };
+
+    const defaultTags = ['Cosplay', 'Japan', 'Korean', 'NAGISA魔物喵', 'けん研', '布丁大法', '碧蓝航线', '蠢沫沫'];
+
+    let scale = 1;
+    let panX = 0;
+    let panY = 0;
+    let dragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let dragPanX = 0;
+    let dragPanY = 0;
+    let activePointerId = null;
+    let currentObjectUrls = [];
+
+    function readRequestTimes() {
+      const now = Date.now();
+      try {
+        const saved = JSON.parse(localStorage.getItem(requestLimit.key) || '[]');
+        return saved.filter((time) => Number.isFinite(time) && now - time < requestLimit.windowMs);
+      } catch {
+        return [];
+      }
+    }
+
+    function writeRequestTimes(times) {
+      localStorage.setItem(requestLimit.key, JSON.stringify(times));
+    }
+
+    function snapshotRequests() {
+      const times = readRequestTimes();
+      writeRequestTimes(times);
+      const remaining = Math.max(0, requestLimit.max - times.length);
+      const waitSeconds = remaining > 0 || times.length === 0
+        ? 0
+        : Math.ceil((requestLimit.windowMs - (Date.now() - times[0])) / 1000);
+      return { times, remaining, waitSeconds };
+    }
+
+    function updateCounter() {
+      const snapshot = snapshotRequests();
+      counterEl.textContent = `本地计数：300 秒内已请求 ${snapshot.times.length} / ${requestLimit.max} 次，剩余 ${snapshot.remaining} 次${snapshot.waitSeconds ? `，约 ${snapshot.waitSeconds} 秒后恢复` : ''}。`;
+      return snapshot;
+    }
+
+    function reserveRequests(count) {
+      const snapshot = snapshotRequests();
+      if (snapshot.remaining < count) return false;
+      const now = Date.now();
+      writeRequestTimes(snapshot.times.concat(Array(count).fill(now)));
+      updateCounter();
+      return true;
+    }
+
+    function buildRandomUrl(tag, nonce = Date.now()) {
+      const params = new URLSearchParams();
+      params.set('t', `${nonce}`);
+      if (tag) params.set('tag', tag);
+      return `${apiBase}/random?${params.toString()}`;
+    }
+
+    function updateActiveTagChip() {
+      const currentTag = tagInput.value.trim();
+      document.querySelectorAll('.tag-chip[data-tag]').forEach((button) => {
+        button.classList.toggle('active', button.dataset.tag === currentTag);
+      });
+    }
+
+    function renderDefaultTags() {
+      quickTagsEl.innerHTML = '';
+      defaultTags.forEach((tag) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'tag-chip';
+        button.dataset.tag = tag;
+        button.textContent = tag;
+        button.addEventListener('click', () => {
+          tagInput.value = tag;
+          updateActiveTagChip();
+          loadTagImages();
+        });
+        quickTagsEl.appendChild(button);
+      });
+    }
+
+    function readFavoriteTags() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(favoriteTagStore.key) || '[]');
+        if (!Array.isArray(saved)) return [];
+        const uniqueTags = [];
+        saved.forEach((item) => {
+          const tag = typeof item === 'string' ? item.trim() : '';
+          if (tag && !uniqueTags.includes(tag)) uniqueTags.push(tag);
+        });
+        return uniqueTags.slice(0, favoriteTagStore.max);
+      } catch {
+        return [];
+      }
+    }
+
+    function writeFavoriteTags(tags) {
+      localStorage.setItem(favoriteTagStore.key, JSON.stringify(tags.slice(0, favoriteTagStore.max)));
+    }
+
+    function renderFavoriteTags() {
+      favoriteTagsEl.innerHTML = '';
+      const tags = readFavoriteTags();
+      if (!tags.length) {
+        const empty = document.createElement('span');
+        empty.className = 'tag-empty';
+        empty.textContent = '还没有收藏标签。';
+        favoriteTagsEl.appendChild(empty);
+        return;
+      }
+
+      tags.forEach((tag) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'tag-chip';
+        button.dataset.tag = tag;
+        button.textContent = tag;
+        button.addEventListener('click', () => {
+          tagInput.value = tag;
+          updateActiveTagChip();
+          loadTagImages();
+        });
+        favoriteTagsEl.appendChild(button);
+      });
+    }
+
+    function saveCurrentTag() {
+      const tag = tagInput.value.trim();
+      if (!tag) {
+        statusEl.textContent = '请先输入标签再收藏。';
+        return;
+      }
+      const tags = readFavoriteTags();
+      if (tags.includes(tag)) {
+        statusEl.textContent = `标签 ${tag} 已在收藏中。`;
+        return;
+      }
+      tags.unshift(tag);
+      writeFavoriteTags(tags);
+      renderFavoriteTags();
+      updateActiveTagChip();
+      statusEl.textContent = `已收藏标签：${tag}`;
+    }
+
+    function removeCurrentTag() {
+      const tag = tagInput.value.trim();
+      if (!tag) {
+        statusEl.textContent = '请先输入标签再取消收藏。';
+        return;
+      }
+      const tags = readFavoriteTags();
+      if (!tags.includes(tag)) {
+        statusEl.textContent = `标签 ${tag} 不在收藏中。`;
+        return;
+      }
+      writeFavoriteTags(tags.filter((item) => item !== tag));
+      renderFavoriteTags();
+      updateActiveTagChip();
+      statusEl.textContent = `已取消收藏标签：${tag}`;
+    }
+
+    function clearGalleryObjectUrls() {
+      currentObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+      currentObjectUrls = [];
+    }
+
+    function createCard(imageUrl, index) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'card';
+      card.setAttribute('aria-label', `查看第 ${index + 1} 张图片`);
+
+      const img = document.createElement('img');
+      img.alt = `图片 ${index + 1}`;
+      img.loading = 'lazy';
+      img.src = imageUrl;
+
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = `#${index + 1}`;
+
+      img.addEventListener('load', () => card.classList.add('loaded'), { once: true });
+      img.addEventListener('error', () => {
+        card.classList.add('loaded');
+        img.alt = '图片加载失败';
+      }, { once: true });
+
+      card.append(img, label);
+      card.addEventListener('click', () => openViewer(imageUrl));
+      return card;
+    }
+
+    function renderGallery(urls) {
+      clearGalleryObjectUrls();
+      gallery.innerHTML = '';
+      const fragment = document.createDocumentFragment();
+      urls.forEach((url, index) => fragment.appendChild(createCard(url, index)));
+      gallery.appendChild(fragment);
+    }
+
+    async function loadTagImages() {
+      const tag = tagInput.value.trim();
+      updateActiveTagChip();
+      if (!tag) {
+        statusEl.textContent = '请输入标签后再加载。';
+        return;
+      }
+
+      const snapshot = updateCounter();
+      if (snapshot.remaining < 4) {
+        statusEl.textContent = `剩余额度不足：还剩 ${snapshot.remaining} 次，需要 4 次。请约 ${snapshot.waitSeconds || 300} 秒后再试。`;
+        return;
+      }
+
+      reserveRequests(4);
+      loadButton.disabled = true;
+      statusEl.textContent = `正在加载标签 ${tag} 的 4 张图片...`;
+      gallery.innerHTML = '';
+
+      try {
+        const urls = Array.from({ length: 4 }, (_, index) => buildRandomUrl(tag, Date.now() + index * 97));
+        renderGallery(urls);
+        statusEl.textContent = `已加载标签 ${tag} 的 4 张图片。`;
+      } catch (error) {
+        statusEl.textContent = `加载失败：${error.message}`;
+      } finally {
+        loadButton.disabled = false;
+        updateCounter();
+      }
+    }
+
+    function updatePreviewTransform() {
+      preview.style.transform = `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${scale})`;
+      zoomText.textContent = `${Math.round(scale * 100)}%`;
+    }
+
+    function resetViewer() {
+      scale = 1;
+      panX = 0;
+      panY = 0;
+      updatePreviewTransform();
+    }
+
+    function openViewer(src) {
+      preview.src = src;
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden', 'false');
+      resetViewer();
+    }
+
+    function closeViewer() {
+      overlay.classList.remove('open');
+      overlay.setAttribute('aria-hidden', 'true');
+      preview.removeAttribute('src');
+      dragging = false;
+      activePointerId = null;
+      stage.classList.remove('dragging');
+    }
+
+    function zoomTo(nextScale, cx, cy) {
+      nextScale = Math.max(0.2, Math.min(8, nextScale));
+      if (cx !== undefined && cy !== undefined) {
+        const rect = preview.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        panX -= (cx - centerX) * (nextScale / scale - 1);
+        panY -= (cy - centerY) * (nextScale / scale - 1);
+      }
+      scale = nextScale;
+      updatePreviewTransform();
+    }
+
+    stage.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      zoomTo(scale * (event.deltaY > 0 ? 0.9 : 1.1), event.clientX, event.clientY);
+    }, { passive: false });
+
+    stage.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 && event.pointerType === 'mouse') return;
+      dragging = true;
+      activePointerId = event.pointerId;
+      dragStartX = event.clientX;
+      dragStartY = event.clientY;
+      dragPanX = panX;
+      dragPanY = panY;
+      stage.classList.add('dragging');
+      stage.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    });
+
+    stage.addEventListener('pointermove', (event) => {
+      if (!dragging || event.pointerId !== activePointerId) return;
+      panX = dragPanX + event.clientX - dragStartX;
+      panY = dragPanY + event.clientY - dragStartY;
+      updatePreviewTransform();
+      event.preventDefault();
+    });
+
+    function stopDragging(event) {
+      if (event && event.pointerId !== activePointerId) return;
+      dragging = false;
+      activePointerId = null;
+      stage.classList.remove('dragging');
+    }
+
+    stage.addEventListener('pointerup', stopDragging);
+    stage.addEventListener('pointercancel', stopDragging);
+    stage.addEventListener('lostpointercapture', () => stopDragging());
+    stage.addEventListener('dblclick', resetViewer);
+
+    document.getElementById('zoomIn').addEventListener('click', () => zoomTo(scale * 1.25, window.innerWidth / 2, window.innerHeight / 2));
+    document.getElementById('zoomOut').addEventListener('click', () => zoomTo(scale * 0.8, window.innerWidth / 2, window.innerHeight / 2));
+    document.getElementById('resetZoom').addEventListener('click', resetViewer);
+    closeButton.addEventListener('click', closeViewer);
+    loadButton.addEventListener('click', loadTagImages);
+    saveTagButton.addEventListener('click', saveCurrentTag);
+    removeTagButton.addEventListener('click', removeCurrentTag);
+    tagInput.addEventListener('input', updateActiveTagChip);
+    tagInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') loadTagImages();
+    });
+
+    renderDefaultTags();
+    renderFavoriteTags();
+    updateActiveTagChip();
+    updateCounter();
+    statusEl.textContent = '点击默认/收藏标签可直接加载，也可以输入标签后加载并收藏。';
+  </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(netstat -ano)",
+      "Bash(findstr \":8000\")",
+      "Bash(curl -s http://127.0.0.1:8000)",
+      "Bash(tasklist *)",
+      "Bash(powershell -NoProfile -Command \"Get-Process -Id 20136 | Select-Object Id,ProcessName,Path | Format-List\")",
+      "Bash(powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\\\"ProcessId=20136\\\\\" | Select-Object ProcessId,CommandLine | Format-List\")",
+      "Bash(python *)"
+    ]
+  }
+}
